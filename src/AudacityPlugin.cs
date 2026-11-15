@@ -11,12 +11,13 @@ namespace Loupedeck.AudacityPlugin
         // Tied to AudacityApplication so the profile auto-switches when Audacity is focused.
         public override Boolean HasNoApplication => false;
 
-        internal AudacityPipeClient Client { get; } = new AudacityPipeClient();
+        internal AudacityPipeClient Client { get; }
 
         public AudacityPlugin()
         {
             PluginLog.Init(this.Log);
             PluginResources.Init(this.Assembly);
+            this.Client = new AudacityPipeClient(this.IsApplicationRunning);
         }
 
         public override void Load()

@@ -22,6 +22,7 @@ namespace Loupedeck.AudacityPlugin.Pipe
         private static readonly TimeSpan DefaultResponseTimeout = TimeSpan.FromSeconds(10);
 
         private readonly Func<IPipeTransport> _createTransport;
+        private readonly Func<Boolean> _isAudacityRunning;
         private readonly TimeSpan _pollInterval;
         private readonly TimeSpan _responseTimeout;
 
@@ -34,25 +35,29 @@ namespace Loupedeck.AudacityPlugin.Pipe
                 new BoundedChannelOptions(MaxQueuedCommands) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
 
         private readonly CancellationTokenSource _cts = new();
+
+        // Guards _transport/_writer/_reader: Disconnect can now run on the poll timer as well as the worker.
+        private readonly Lock _gate = new();
         private IPipeTransport _transport;
         private StreamWriter _writer;
         private StreamReader _reader;
         private Task _worker;
         private Timer _poll;
         private Int32 _connecting;
-        private Int32 _inFlight;
         private Boolean _connected;
         private TransportState _transportState = TransportState.Stopped;
 
-        public AudacityPipeClient()
-            : this(IPipeTransport.Create, DefaultPollInterval, DefaultResponseTimeout)
+        /// <param name="isAudacityRunning">Process check used to notice Audacity exiting without sending it anything.</param>
+        public AudacityPipeClient(Func<Boolean> isAudacityRunning)
+            : this(IPipeTransport.Create, isAudacityRunning, DefaultPollInterval, DefaultResponseTimeout)
         {
         }
 
         // Tests pass a fake transport and their own timings.
-        internal AudacityPipeClient(Func<IPipeTransport> createTransport, TimeSpan pollInterval, TimeSpan responseTimeout)
+        internal AudacityPipeClient(Func<IPipeTransport> createTransport, Func<Boolean> isAudacityRunning, TimeSpan pollInterval, TimeSpan responseTimeout)
         {
             this._createTransport = createTransport;
+            this._isAudacityRunning = isAudacityRunning;
             this._pollInterval = pollInterval;
             this._responseTimeout = responseTimeout;
         }
@@ -113,11 +118,13 @@ namespace Loupedeck.AudacityPlugin.Pipe
         {
             if (this.Connected)
             {
-                // Cheap liveness probe; a broken pipe surfaces as an IOException in the worker.
-                // Skipped while a command is pending: that command already tests the pipe.
-                if (Volatile.Read(ref this._inFlight) == 0 && this._queue.Reader.Count == 0)
+                // Never probe the pipe: every scripting command, even a no-op, runs on Audacity's
+                // UI thread and closes any open menu. Check the process instead; a pipe broken
+                // some other way surfaces as an IOException on the next real command.
+                if (!this._isAudacityRunning())
                 {
-                    _ = this.SendAsync("Message: Text=\"\"");
+                    PluginLog.Info("Audacity has exited");
+                    this.Disconnect();
                 }
                 return;
             }
@@ -151,9 +158,12 @@ namespace Loupedeck.AudacityPlugin.Pipe
                 return; // Audacity not running / module disabled; try again next poll
             }
 
-            this._transport = transport;
-            this._writer = new StreamWriter(transport.ToAudacity, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-            this._reader = new StreamReader(transport.FromAudacity, new UTF8Encoding(false));
+            lock (this._gate)
+            {
+                this._transport = transport;
+                this._writer = new StreamWriter(transport.ToAudacity, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
+                this._reader = new StreamReader(transport.FromAudacity, new UTF8Encoding(false));
+            }
             this.SetConnected(true);
             PluginLog.Info("Connected to Audacity mod-script-pipe");
         }
@@ -167,7 +177,6 @@ namespace Loupedeck.AudacityPlugin.Pipe
                     tcs.TrySetResult(new PipeResult(false, "Not connected to Audacity"));
                     continue;
                 }
-                Volatile.Write(ref this._inFlight, 1);
                 try
                 {
                     tcs.TrySetResult(await this.ExchangeAsync(command, ct).WaitAsync(this._responseTimeout, ct).ConfigureAwait(false));
@@ -181,30 +190,52 @@ namespace Loupedeck.AudacityPlugin.Pipe
                     PluginLog.Warning($"{message} to '{command}'; reconnecting");
                     this.Disconnect();
                 }
-                catch (Exception ex) when (ex is IOException or ObjectDisposedException or EndOfStreamException)
+                // A disconnect from the poll disposes the streams under an in-flight exchange; an
+                // aborted pipe read may surface as OperationCanceledException rather than IOException.
+                catch (Exception ex) when (ex is IOException or ObjectDisposedException or EndOfStreamException
+                    || (ex is OperationCanceledException && !ct.IsCancellationRequested))
                 {
                     tcs.TrySetResult(new PipeResult(false, ex.Message));
                     this.Disconnect();
-                }
-                finally
-                {
-                    Volatile.Write(ref this._inFlight, 0);
                 }
             }
         }
 
         private async Task<PipeResult> ExchangeAsync(String command, CancellationToken ct)
         {
-            await this._writer.WriteAsync(command + this._transport.CommandTerminator).ConfigureAwait(false);
-            return await PipeResponseReader.ReadAsync(this._reader, ct).ConfigureAwait(false);
+            StreamWriter writer;
+            StreamReader reader;
+            String terminator;
+            lock (this._gate)
+            {
+                writer = this._writer;
+                reader = this._reader;
+                terminator = this._transport?.CommandTerminator;
+            }
+            if (writer == null)
+            {
+                return new PipeResult(false, "Not connected to Audacity");
+            }
+            await writer.WriteAsync(command + terminator).ConfigureAwait(false);
+            return await PipeResponseReader.ReadAsync(reader, ct).ConfigureAwait(false);
         }
 
+        // Safe to call from the worker and the poll timer at once; only the first call acts.
         private void Disconnect()
         {
-            this._writer = null;
-            this._reader = null;
-            this._transport?.Dispose();
-            this._transport = null;
+            IPipeTransport transport;
+            lock (this._gate)
+            {
+                transport = this._transport;
+                this._transport = null;
+                this._writer = null;
+                this._reader = null;
+            }
+            if (transport == null)
+            {
+                return;
+            }
+            transport.Dispose();
             this._transportState = TransportState.Stopped;
             this.SetConnected(false);
             PluginLog.Info("Disconnected from Audacity");

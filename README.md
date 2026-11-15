@@ -35,7 +35,7 @@ Pipes: Windows `\\.\pipe\ToSrvPipe` / `\\.\pipe\FromSrvPipe`; macOS `/tmp/audaci
 ## Known limits
 - Transport state (record/play/pause highlight) is **optimistic**: the pipe has no state query or events, so starting playback from Audacity's own UI won't light the buttons.
 - Gain is tracked plugin-side from 0 dB, not read back from Audacity.
-- Connection is polled every 2 s (`Message` no-op) to drive the "-off" icons and plugin status. The probe is skipped while a command is waiting for Audacity.
+- The plugin never sends Audacity anything unless you press a button or turn a dial: any scripting command, even a no-op, runs on Audacity's UI thread and closes open menus. Every 2 s it checks whether the Audacity process is still running (to drive the "-off" icons and plugin status) and reconnects when it isn't connected. If Audacity restarts within those 2 s, the first press afterwards fails and the plugin reconnects.
 - If Audacity doesn't answer a command within 10 s (e.g. a modal Save dialog is open), the command fails, the plugin disconnects and drops anything queued behind it, then reconnects on the next poll. Up to 32 commands can queue; further presses are dropped until Audacity catches up.
 
 ## Assets

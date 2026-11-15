@@ -64,6 +64,12 @@ namespace Loupedeck.AudacityPlugin.Tests.Pipe
         /// <summary>Simulates Audacity quitting: the client sees end of stream.</summary>
         public void CloseFromAudacity() => this._fromAudacity.Writer.Complete();
 
-        public void Dispose() => this.IsDisposed = true;
+        /// <summary>Like a real transport, disposal ends both streams so pending reads finish.</summary>
+        public void Dispose()
+        {
+            this.IsDisposed = true;
+            this._toAudacity.Writer.Complete();
+            this._fromAudacity.Writer.Complete();
+        }
     }
 }

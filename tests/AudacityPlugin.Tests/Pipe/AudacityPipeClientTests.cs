@@ -16,6 +16,7 @@ namespace Loupedeck.AudacityPlugin.Tests.Pipe
         // Long enough that the liveness probe never fires during a test unless a test asks for it.
         private static readonly TimeSpan NoPoll = TimeSpan.FromHours(1);
         private static readonly TimeSpan NoTimeout = TimeSpan.FromHours(1);
+        private static readonly TimeSpan FastPoll = TimeSpan.FromMilliseconds(50);
         private static readonly TimeSpan WaitLimit = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan SettleTime = TimeSpan.FromMilliseconds(200);
 
@@ -25,7 +26,7 @@ namespace Loupedeck.AudacityPlugin.Tests.Pipe
         public async Task SendBeforeConnectingFailsFast()
         {
             var fake = new FakePipeTransport();
-            using var client = new AudacityPipeClient(() => fake, NoPoll, NoTimeout);
+            using var client = new AudacityPipeClient(() => fake, () => true, NoPoll, NoTimeout);
 
             var result = await client.SendAsync("Undo");
 
@@ -36,7 +37,7 @@ namespace Loupedeck.AudacityPlugin.Tests.Pipe
         public async Task StartConnectsAndRaisesStateChanged()
         {
             var fake = new FakePipeTransport();
-            using var client = new AudacityPipeClient(() => fake, NoPoll, NoTimeout);
+            using var client = new AudacityPipeClient(() => fake, () => true, NoPoll, NoTimeout);
             var raised = 0;
             client.StateChanged += (_, _) => Interlocked.Increment(ref raised);
 
@@ -104,7 +105,7 @@ namespace Loupedeck.AudacityPlugin.Tests.Pipe
         public async Task FailedOpenStaysDisconnectedAndDisposesTheTransport()
         {
             var fake = new FakePipeTransport { OpenError = new IOException("pipe not found") };
-            using var client = new AudacityPipeClient(() => fake, NoPoll, NoTimeout);
+            using var client = new AudacityPipeClient(() => fake, () => true, NoPoll, NoTimeout);
 
             client.Start();
             await WaitUntilAsync(() => fake.IsDisposed);
@@ -120,7 +121,7 @@ namespace Loupedeck.AudacityPlugin.Tests.Pipe
             IPipeTransport Create() => Interlocked.Increment(ref calls) == 1
                 ? new FakePipeTransport { OpenError = new TimeoutException("not running yet") }
                 : available;
-            using var client = new AudacityPipeClient(Create, TimeSpan.FromMilliseconds(50), NoTimeout);
+            using var client = new AudacityPipeClient(Create, () => true, TimeSpan.FromMilliseconds(50), NoTimeout);
 
             client.Start();
             await WaitUntilAsync(() => client.Connected);
@@ -168,8 +169,9 @@ namespace Loupedeck.AudacityPlugin.Tests.Pipe
 
             Assert.False((await first.WaitAsync(WaitLimit, Ct)).Ok);
             Assert.Equal(new PipeResult(false, "Not connected to Audacity"), await queued.WaitAsync(WaitLimit, Ct));
-            await Task.Delay(SettleTime, Ct);
-            Assert.False(next.IsCompleted, "Queued command was sent after the timeout");
+            // Disconnecting disposes the transport, which ends the fake's command stream:
+            // the queued command must not have been written before that.
+            Assert.Null(await next.WaitAsync(WaitLimit, Ct));
         }
 
         [Fact]
@@ -192,48 +194,63 @@ namespace Loupedeck.AudacityPlugin.Tests.Pipe
             Assert.DoesNotContain(accepted, t => t.IsCompleted);
         }
 
+        // Any command, even a no-op, runs on Audacity's UI thread and closes open menus,
+        // so nothing may be sent unless the user acts.
         [Fact]
-        public async Task LivenessProbesDoNotPileUpWhileACommandIsWaiting()
+        public async Task NothingIsSentWhileIdle()
         {
             var fake = new FakePipeTransport();
-            using var client = await StartConnectedAsync(fake, TimeSpan.FromMilliseconds(50), NoTimeout);
+            using var client = await StartConnectedAsync(fake, () => true, FastPoll, NoTimeout);
 
-            // The first poll after connecting may already have queued a probe; answer anything
-            // that isn't our command until it's in flight.
+            var read = fake.ReadCommandAsync(Ct);
+            await Task.Delay(SettleTime, Ct);
+
+            Assert.False(read.IsCompleted, "A command was sent while idle");
+            Assert.True(client.Connected);
+        }
+
+        [Fact]
+        public async Task AudacityExitingDisconnectsWithoutSendingAnything()
+        {
+            var running = 1;
+            var fake = new FakePipeTransport();
+            using var client = await StartConnectedAsync(fake, () => Volatile.Read(ref running) == 1, FastPoll, NoTimeout);
+            var read = fake.ReadCommandAsync(Ct);
+
+            Volatile.Write(ref running, 0);
+            await WaitUntilAsync(() => !client.Connected);
+
+            Assert.True(fake.IsDisposed);
+            Assert.Equal(TransportState.Stopped, client.Transport);
+            // Disposal ends the fake's command stream; nothing may have been written before it.
+            Assert.Null(await read.WaitAsync(WaitLimit, Ct));
+        }
+
+        [Fact]
+        public async Task CommandInFlightWhenAudacityExitsFailsAndDisconnects()
+        {
+            var running = 1;
+            var fake = new FakePipeTransport();
+            using var client = await StartConnectedAsync(fake, () => Volatile.Read(ref running) == 1, FastPoll, NoTimeout);
+
             var pending = client.SendAsync("Save");
-            while (await fake.ReadCommandAsync(Ct).WaitAsync(WaitLimit, Ct) != "Save")
-            {
-                await fake.RespondAsync(true);
-            }
+            await fake.ReadCommandAsync(Ct).WaitAsync(WaitLimit, Ct);
+            Volatile.Write(ref running, 0);
 
-            // About 10 polls happen while Save is waiting for its response.
-            await Task.Delay(TimeSpan.FromMilliseconds(500), Ct);
-            await fake.RespondAsync(true);
-            await pending.WaitAsync(WaitLimit, Ct);
-
-            // Count probes that arrive straight away: queued ones arrive at once, fresh ones one per poll.
-            var probes = 0;
-            var window = Task.Delay(TimeSpan.FromMilliseconds(30), Ct);
-            while (true)
-            {
-                var read = fake.ReadCommandAsync(Ct);
-                if (await Task.WhenAny(read, window) != read)
-                {
-                    break;
-                }
-                probes++;
-                await fake.RespondAsync(true);
-            }
-
-            Assert.True(probes <= 1, $"{probes} probes were queued while a command was waiting");
+            Assert.False((await pending.WaitAsync(WaitLimit, Ct)).Ok);
+            await WaitUntilAsync(() => !client.Connected);
         }
 
         private static Task<AudacityPipeClient> StartConnectedAsync(FakePipeTransport fake) =>
-            StartConnectedAsync(fake, NoPoll, NoTimeout);
+            StartConnectedAsync(fake, () => true, NoPoll, NoTimeout);
 
-        private static async Task<AudacityPipeClient> StartConnectedAsync(FakePipeTransport fake, TimeSpan pollInterval, TimeSpan responseTimeout)
+        private static Task<AudacityPipeClient> StartConnectedAsync(FakePipeTransport fake, TimeSpan pollInterval, TimeSpan responseTimeout) =>
+            StartConnectedAsync(fake, () => true, pollInterval, responseTimeout);
+
+        private static async Task<AudacityPipeClient> StartConnectedAsync(
+            FakePipeTransport fake, Func<Boolean> isAudacityRunning, TimeSpan pollInterval, TimeSpan responseTimeout)
         {
-            var client = new AudacityPipeClient(() => fake, pollInterval, responseTimeout);
+            var client = new AudacityPipeClient(() => fake, isAudacityRunning, pollInterval, responseTimeout);
             client.Start();
             await WaitUntilAsync(() => client.Connected);
             return client;
