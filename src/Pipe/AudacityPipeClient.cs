@@ -18,7 +18,10 @@ namespace Loupedeck.AudacityPlugin.Pipe
     internal sealed class AudacityPipeClient : IDisposable
     {
         private static readonly TimeSpan OpenTimeout = TimeSpan.FromMilliseconds(750);
-        private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(2);
+
+        private readonly Func<IPipeTransport> _createTransport;
+        private readonly TimeSpan _pollInterval;
 
         private readonly Channel<(String Command, TaskCompletionSource<PipeResult> Tcs)> _queue =
             Channel.CreateUnbounded<(String, TaskCompletionSource<PipeResult>)>(new UnboundedChannelOptions { SingleReader = true });
@@ -32,6 +35,18 @@ namespace Loupedeck.AudacityPlugin.Pipe
         private Int32 _connecting;
         private Boolean _connected;
         private TransportState _transportState = TransportState.Stopped;
+
+        public AudacityPipeClient()
+            : this(IPipeTransport.Create, DefaultPollInterval)
+        {
+        }
+
+        // Tests pass a fake transport and their own poll interval.
+        internal AudacityPipeClient(Func<IPipeTransport> createTransport, TimeSpan pollInterval)
+        {
+            this._createTransport = createTransport;
+            this._pollInterval = pollInterval;
+        }
 
         /// <summary>Raised (on a pool thread) when Connected or Transport changes.</summary>
         public event EventHandler StateChanged;
@@ -58,7 +73,7 @@ namespace Loupedeck.AudacityPlugin.Pipe
         public void Start()
         {
             this._worker = Task.Run(() => this.WorkerLoopAsync(this._cts.Token));
-            this._poll = new Timer(_ => this.Poll(), null, TimeSpan.Zero, PollInterval);
+            this._poll = new Timer(_ => this.Poll(), null, TimeSpan.Zero, this._pollInterval);
         }
 
         /// <summary>Queue a command; never blocks the caller. Fails fast when disconnected.</summary>
@@ -110,7 +125,7 @@ namespace Loupedeck.AudacityPlugin.Pipe
 
         private async Task ConnectAsync()
         {
-            var transport = IPipeTransport.Create();
+            var transport = this._createTransport();
             try
             {
                 await transport.OpenAsync(OpenTimeout, this._cts.Token).ConfigureAwait(false);
