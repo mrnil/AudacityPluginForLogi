@@ -1,7 +1,6 @@
 namespace Loupedeck.AudacityPlugin.Pipe
 {
     using System;
-    using System.Collections.Generic;
     using System.IO;
     using System.Text;
     using System.Threading;
@@ -18,7 +17,6 @@ namespace Loupedeck.AudacityPlugin.Pipe
     /// </summary>
     internal sealed class AudacityPipeClient : IDisposable
     {
-        private const String FinishedPrefix = "BatchCommand finished:";
         private static readonly TimeSpan OpenTimeout = TimeSpan.FromMilliseconds(750);
         private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
 
@@ -142,32 +140,13 @@ namespace Loupedeck.AudacityPlugin.Pipe
                 try
                 {
                     await this._writer.WriteAsync(command + this._transport.CommandTerminator).ConfigureAwait(false);
-                    tcs.TrySetResult(await this.ReadResponseAsync(ct).ConfigureAwait(false));
+                    tcs.TrySetResult(await PipeResponseReader.ReadAsync(this._reader, ct).ConfigureAwait(false));
                 }
                 catch (Exception ex) when (ex is IOException or ObjectDisposedException or EndOfStreamException)
                 {
                     tcs.TrySetResult(new PipeResult(false, ex.Message));
                     this.Disconnect();
                 }
-            }
-        }
-
-        // Response = zero or more output lines, then "BatchCommand finished: OK|Failed!", then a blank line.
-        private async Task<PipeResult> ReadResponseAsync(CancellationToken ct)
-        {
-            var output = new List<String>();
-            while (true)
-            {
-                var line = await this._reader.ReadLineAsync(ct).ConfigureAwait(false)
-                    ?? throw new EndOfStreamException("Audacity closed the pipe");
-                line = line.TrimEnd('\0');
-                if (line.StartsWith(FinishedPrefix, StringComparison.Ordinal))
-                {
-                    await this._reader.ReadLineAsync(ct).ConfigureAwait(false); // trailing blank line
-                    var ok = line.Substring(FinishedPrefix.Length).Trim().StartsWith("OK", StringComparison.Ordinal);
-                    return new PipeResult(ok, String.Join("\n", output));
-                }
-                output.Add(line);
             }
         }
 
