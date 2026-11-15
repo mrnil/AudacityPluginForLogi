@@ -6,14 +6,17 @@ author: Stephen
 copyright: Copyright (c) 2026 Stephen
 description: Control Audacity recording, playback, labels, zoom and track gain over mod-script-pipe.
 
-# VERIFY: copy the supportedDevices list from the yaml that `logiplugintool generate` produces
-# (or llms-full.txt). I don't have the exact identifiers for MX Creative Console / MX Master 4.
+# Names are Loupedeck.DeviceType values; check with `logiplugintool verify` after packing.
 supportedDevices:
-  - LoupedeckCtFamily
-  - LoupedeckLiveFamily
+  - LoupedeckCtFamily        # Loupedeck CT, Live, Live S
+  - LoupedeckExtendedFamily  # Logitech MX Creative Console (Keypad, Dialpad)
 
 pluginFileName: AudacityPlugin.dll
 pluginFolderWin: bin/
 pluginFolderMac: bin/
 
 license: MIT
+licenseUrl: https://opensource.org/licenses/MIT
+
+# TODO: required for the marketplace; add once the repo has a public remote (e.g. its issues page).
+# supportPageUrl:

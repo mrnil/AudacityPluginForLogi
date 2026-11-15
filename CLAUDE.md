@@ -22,6 +22,7 @@ Logi Actions SDK plugin (C#, net10.0) that drives Audacity from Loupedeck / MX C
 - Secret scan: `gitleaks git --redact` (history); the pre-commit hook scans staged changes.
 - Hooks: after cloning, run `git config core.hooksPath .githooks` (gitleaks pre-commit, Conventional Commits commit-msg).
 - Package / install: `logiplugintool pack ./bin/Release ./Audacity.lplug4`, then `logiplugintool install ./Audacity.lplug4`.
+- Manifest check: after any change to `LoupedeckPackage.yaml`, pack and run `logiplugintool verify <package>.lplug4` (it rejects unknown `supportedDevices` names); `logiplugintool metadata <package>.lplug4` shows what was parsed.
 - Plugin log: `%LocalAppData%\Logi\LogiPluginService\Logs\plugin_logs\Audacity.log`.
 - Check command ids against the installed Audacity (Audacity running): `python tools/verify_commands.py`.
 - Debug: attach to `LogiPluginService.exe` (`.vscode/launch.json`).
