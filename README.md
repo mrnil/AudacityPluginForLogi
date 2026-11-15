@@ -35,7 +35,8 @@ Pipes: Windows `\\.\pipe\ToSrvPipe` / `\\.\pipe\FromSrvPipe`; macOS `/tmp/audaci
 ## Known limits
 - Transport state (record/play/pause highlight) is **optimistic**: the pipe has no state query or events, so starting playback from Audacity's own UI won't light the buttons.
 - Gain is tracked plugin-side from 0 dB, not read back from Audacity.
-- Connection is polled every 2 s (`Message` no-op) to drive the "-off" icons and plugin status.
+- Connection is polled every 2 s (`Message` no-op) to drive the "-off" icons and plugin status. The probe is skipped while a command is waiting for Audacity.
+- If Audacity doesn't answer a command within 10 s (e.g. a modal Save dialog is open), the command fails, the plugin disconnects and drops anything queued behind it, then reconnects on the next poll. Up to 32 commands can queue; further presses are dropped until Audacity catches up.
 
 ## Assets
 - `src/Images/*.png` — 80×80 PNG, RGBA, three variants each: `<name>.png`, `<name>-active.png` (record/play/pause), `<name>-off.png` (disconnected). Regenerate with `tools/make_icons.py src`.

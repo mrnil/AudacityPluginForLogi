@@ -19,12 +19,19 @@ namespace Loupedeck.AudacityPlugin.Pipe
     {
         private static readonly TimeSpan OpenTimeout = TimeSpan.FromMilliseconds(750);
         private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan DefaultResponseTimeout = TimeSpan.FromSeconds(10);
 
         private readonly Func<IPipeTransport> _createTransport;
         private readonly TimeSpan _pollInterval;
+        private readonly TimeSpan _responseTimeout;
+
+        // Bounded so a blocked Audacity (e.g. a modal dialog) can't build up a backlog that all
+        // fires at once when it unblocks.
+        private const Int32 MaxQueuedCommands = 32;
 
         private readonly Channel<(String Command, TaskCompletionSource<PipeResult> Tcs)> _queue =
-            Channel.CreateUnbounded<(String, TaskCompletionSource<PipeResult>)>(new UnboundedChannelOptions { SingleReader = true });
+            Channel.CreateBounded<(String, TaskCompletionSource<PipeResult>)>(
+                new BoundedChannelOptions(MaxQueuedCommands) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
 
         private readonly CancellationTokenSource _cts = new();
         private IPipeTransport _transport;
@@ -33,19 +40,21 @@ namespace Loupedeck.AudacityPlugin.Pipe
         private Task _worker;
         private Timer _poll;
         private Int32 _connecting;
+        private Int32 _inFlight;
         private Boolean _connected;
         private TransportState _transportState = TransportState.Stopped;
 
         public AudacityPipeClient()
-            : this(IPipeTransport.Create, DefaultPollInterval)
+            : this(IPipeTransport.Create, DefaultPollInterval, DefaultResponseTimeout)
         {
         }
 
-        // Tests pass a fake transport and their own poll interval.
-        internal AudacityPipeClient(Func<IPipeTransport> createTransport, TimeSpan pollInterval)
+        // Tests pass a fake transport and their own timings.
+        internal AudacityPipeClient(Func<IPipeTransport> createTransport, TimeSpan pollInterval, TimeSpan responseTimeout)
         {
             this._createTransport = createTransport;
             this._pollInterval = pollInterval;
+            this._responseTimeout = responseTimeout;
         }
 
         /// <summary>Raised (on a pool thread) when Connected or Transport changes.</summary>
@@ -76,16 +85,18 @@ namespace Loupedeck.AudacityPlugin.Pipe
             this._poll = new Timer(_ => this.Poll(), null, TimeSpan.Zero, this._pollInterval);
         }
 
-        /// <summary>Queue a command; never blocks the caller. Fails fast when disconnected.</summary>
+        /// <summary>Queue a command; never blocks the caller. Fails fast when disconnected or the queue is full.</summary>
         public Task<PipeResult> SendAsync(String command)
         {
             var tcs = new TaskCompletionSource<PipeResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             if (!this.Connected)
             {
                 tcs.SetResult(new PipeResult(false, "Not connected to Audacity"));
-                return tcs.Task;
             }
-            this._queue.Writer.TryWrite((command, tcs));
+            else if (!this._queue.Writer.TryWrite((command, tcs)))
+            {
+                tcs.SetResult(new PipeResult(false, "Audacity is busy; command dropped"));
+            }
             return tcs.Task;
         }
 
@@ -103,7 +114,11 @@ namespace Loupedeck.AudacityPlugin.Pipe
             if (this.Connected)
             {
                 // Cheap liveness probe; a broken pipe surfaces as an IOException in the worker.
-                _ = this.SendAsync("Message: Text=\"\"");
+                // Skipped while a command is pending: that command already tests the pipe.
+                if (Volatile.Read(ref this._inFlight) == 0 && this._queue.Reader.Count == 0)
+                {
+                    _ = this.SendAsync("Message: Text=\"\"");
+                }
                 return;
             }
             if (Interlocked.Exchange(ref this._connecting, 1) == 1)
@@ -152,17 +167,36 @@ namespace Loupedeck.AudacityPlugin.Pipe
                     tcs.TrySetResult(new PipeResult(false, "Not connected to Audacity"));
                     continue;
                 }
+                Volatile.Write(ref this._inFlight, 1);
                 try
                 {
-                    await this._writer.WriteAsync(command + this._transport.CommandTerminator).ConfigureAwait(false);
-                    tcs.TrySetResult(await PipeResponseReader.ReadAsync(this._reader, ct).ConfigureAwait(false));
+                    tcs.TrySetResult(await this.ExchangeAsync(command, ct).WaitAsync(this._responseTimeout, ct).ConfigureAwait(false));
+                }
+                catch (TimeoutException)
+                {
+                    // A late response would be read as the reply to the next command, so the
+                    // connection can't be reused. Drop it; the poll reconnects.
+                    var message = FormattableString.Invariant($"Audacity did not respond within {this._responseTimeout.TotalSeconds:0.#} s");
+                    tcs.TrySetResult(new PipeResult(false, message));
+                    PluginLog.Warning($"{message} to '{command}'; reconnecting");
+                    this.Disconnect();
                 }
                 catch (Exception ex) when (ex is IOException or ObjectDisposedException or EndOfStreamException)
                 {
                     tcs.TrySetResult(new PipeResult(false, ex.Message));
                     this.Disconnect();
                 }
+                finally
+                {
+                    Volatile.Write(ref this._inFlight, 0);
+                }
             }
+        }
+
+        private async Task<PipeResult> ExchangeAsync(String command, CancellationToken ct)
+        {
+            await this._writer.WriteAsync(command + this._transport.CommandTerminator).ConfigureAwait(false);
+            return await PipeResponseReader.ReadAsync(this._reader, ct).ConfigureAwait(false);
         }
 
         private void Disconnect()

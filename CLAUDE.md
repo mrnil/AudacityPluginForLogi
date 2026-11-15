@@ -7,7 +7,7 @@ Logi Actions SDK plugin (C#, net10.0) that drives Audacity from Loupedeck / MX C
 - `src/AudacityApplication.cs`: links the plugin to Audacity (process `Audacity`, bundle `org.audacityteam.audacity`).
 - `src/Actions/AudacityCommand.cs`: all buttons as parameters of one `PluginDynamicCommand`, table-driven (`Defs`). Parameter key = Audacity scripting command id.
 - `src/Adjustments/`: Scrub, Zoom and Gain dials; ticks go through `TickCoalescer`.
-- `src/Pipe/`: `AudacityPipeClient` (one connection, one `Channel` queue, so request/response pairs never interleave; 2 s poll reconnects or probes with `Message`), `IPipeTransport` with `WindowsPipeTransport` (`\\.\pipe\ToSrvPipe`/`FromSrvPipe`) and `UnixFifoTransport` (`/tmp/audacity_script_pipe.{to,from}.<uid>`).
+- `src/Pipe/`: `AudacityPipeClient` (one connection, one `Channel` queue, so request/response pairs never interleave; 2 s poll reconnects or probes with `Message` when idle; queue capped at 32; a 10 s response timeout disconnects so a late reply can't be read as the next command's), response parsing in `PipeResponseReader`, `IPipeTransport` with `WindowsPipeTransport` (`\\.\pipe\ToSrvPipe`/`FromSrvPipe`) and `UnixFifoTransport` (`/tmp/audacity_script_pipe.{to,from}.<uid>`).
 - State is in memory only. Transport state and gain are optimistic: the pipe has no state query or events.
 - Icons: `src/Images/<name>[-active|-off].png`, 80x80, embedded resources; regenerate with `python tools/make_icons.py src` (needs Pillow).
 
