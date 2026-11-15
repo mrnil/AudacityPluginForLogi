@@ -15,8 +15,9 @@ Logi Actions SDK plugin (C#, net10.0) that drives Audacity from Loupedeck / MX C
 - Build: `dotnet build -c Debug`. Side effects: copies `src/package/` into `bin/Debug/`, writes `%LocalAppData%\Logi\LogiPluginService\Plugins\AudacityPlugin.link` and reloads the plugin in Logi Plugin Service.
 - Compile only, no side effects: `dotnet msbuild src/AudacityPlugin.csproj -restore -t:Compile -p:Configuration=Debug -p:SolutionDir=<repo root>/`
 - Lint: part of the build. Analyzers (`latest-recommended`) and `src/.editorconfig` style rules are enforced with warnings as errors.
-- Test: no test project yet.
-- Dependency audit: `dotnet list src/AudacityPlugin.csproj package --vulnerable --include-transitive`. There are no NuGet packages, so DLLs bundled with `PluginApi.dll` are not covered.
+- Test: `dotnet test --project tests/AudacityPlugin.Tests` (xUnit v3 on Microsoft.Testing.Platform, set in `global.json`). Don't run bare `dotnet test` at the root: it builds the plugin project, which triggers the deploy side effects above.
+- Tests compile plugin sources as linked files (see `tests/AudacityPlugin.Tests/AudacityPlugin.Tests.csproj`), not via ProjectReference; add a folder there when its classes need tests.
+- Dependency audit: `dotnet list src/AudacityPlugin.csproj package --vulnerable --include-transitive` and the same for `tests/AudacityPlugin.Tests`. The plugin has no NuGet packages, so DLLs bundled with `PluginApi.dll` are not covered.
 - Secret scan: `gitleaks git --redact` (history); the pre-commit hook scans staged changes.
 - Hooks: after cloning, run `git config core.hooksPath .githooks` (gitleaks pre-commit, Conventional Commits commit-msg).
 - Package / install: `logiplugintool pack ./bin/Release ./Audacity.lplug4`, then `logiplugintool install ./Audacity.lplug4`.
