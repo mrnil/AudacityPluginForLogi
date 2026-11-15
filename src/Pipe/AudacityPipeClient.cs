@@ -21,6 +21,10 @@ namespace Loupedeck.AudacityPlugin.Pipe
         private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(2);
         private static readonly TimeSpan DefaultResponseTimeout = TimeSpan.FromSeconds(10);
 
+        // Bounds how long Dispose (plugin unload) waits for the worker to stop.
+        private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(1);
+        private const String ShuttingDown = "Plugin is shutting down";
+
         private readonly Func<IPipeTransport> _createTransport;
         private readonly Func<Boolean> _isAudacityRunning;
         private readonly TimeSpan _pollInterval;
@@ -44,6 +48,7 @@ namespace Loupedeck.AudacityPlugin.Pipe
         private Task _worker;
         private Timer _poll;
         private Int32 _connecting;
+        private Int32 _disposed;
         private Boolean _connected;
         private TransportState _transportState = TransportState.Stopped;
 
@@ -160,6 +165,12 @@ namespace Loupedeck.AudacityPlugin.Pipe
 
             lock (this._gate)
             {
+                // A poll already running when Dispose was called must not leave a live connection behind.
+                if (Volatile.Read(ref this._disposed) == 1)
+                {
+                    transport.Dispose();
+                    return;
+                }
                 this._transport = transport;
                 this._writer = new StreamWriter(transport.ToAudacity, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
                 this._reader = new StreamReader(transport.FromAudacity, new UTF8Encoding(false));
@@ -180,6 +191,12 @@ namespace Loupedeck.AudacityPlugin.Pipe
                 try
                 {
                     tcs.TrySetResult(await this.ExchangeAsync(command, ct).WaitAsync(this._responseTimeout, ct).ConfigureAwait(false));
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    // Dispose: fail this command; Dispose fails anything still queued.
+                    tcs.TrySetResult(new PipeResult(false, ShuttingDown));
+                    return;
                 }
                 catch (TimeoutException)
                 {
@@ -250,12 +267,33 @@ namespace Loupedeck.AudacityPlugin.Pipe
             }
         }
 
+        // Called on plugin unload. Leaves nothing pending: every queued command completes (failed),
+        // the worker has stopped (or the bounded wait expired), and no connection survives.
+        // _cts is deliberately not disposed: a timer callback already in progress may still read its token.
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref this._disposed, 1) == 1)
+            {
+                return;
+            }
             this._poll?.Dispose();
-            this._cts.Cancel();
             this._queue.Writer.TryComplete();
-            this._transport?.Dispose();
+            this._cts.Cancel();
+            this.Disconnect();
+
+            try
+            {
+                this._worker?.Wait(ShutdownTimeout);
+            }
+            catch (AggregateException)
+            {
+                // The worker ends with OperationCanceledException when cancelled while idle.
+            }
+
+            while (this._queue.Reader.TryRead(out var item))
+            {
+                item.Tcs.TrySetResult(new PipeResult(false, ShuttingDown));
+            }
         }
     }
 }

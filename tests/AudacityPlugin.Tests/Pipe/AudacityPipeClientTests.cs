@@ -141,6 +141,48 @@ namespace Loupedeck.AudacityPlugin.Tests.Pipe
         }
 
         [Fact]
+        public async Task DisposeFailsTheCommandInFlightAndThoseStillQueued()
+        {
+            var fake = new FakePipeTransport();
+            var client = await StartConnectedAsync(fake);
+
+            var inFlight = client.SendAsync("Save");
+            await fake.ReadCommandAsync(Ct).WaitAsync(WaitLimit, Ct);
+            var queued = client.SendAsync("PlayStop");
+
+            client.Dispose();
+
+            Assert.False((await inFlight.WaitAsync(WaitLimit, Ct)).Ok);
+            Assert.False((await queued.WaitAsync(WaitLimit, Ct)).Ok);
+        }
+
+        [Fact]
+        public async Task SendAfterDisposeFailsFastAsNotConnected()
+        {
+            var fake = new FakePipeTransport();
+            var client = await StartConnectedAsync(fake);
+
+            client.Dispose();
+            var result = client.SendAsync("PlayStop");
+
+            Assert.False(client.Connected);
+            Assert.True(result.IsCompleted, "Send after Dispose should not wait");
+            Assert.Equal(new PipeResult(false, "Not connected to Audacity"), await result);
+        }
+
+        [Fact]
+        public async Task DisposeCanBeCalledTwice()
+        {
+            var fake = new FakePipeTransport();
+            var client = await StartConnectedAsync(fake);
+
+            client.Dispose();
+            client.Dispose();
+
+            Assert.True(fake.IsDisposed);
+        }
+
+        [Fact]
         public async Task CommandWithNoResponseTimesOutAndDisconnects()
         {
             var fake = new FakePipeTransport();
