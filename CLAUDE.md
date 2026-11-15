@@ -35,6 +35,13 @@ Logi Actions SDK plugin (C#, net10.0) that drives Audacity from Loupedeck / MX C
 - `// VERIFY:` marks assumptions not yet confirmed against Audacity or the SDK.
 - Comments explain why, not what.
 
+## Audacity scripting facts (checked against Audacity 3.7.9)
+- `GetInfo: Type=Tracks Format=JSON` lists one entry per track (stereo = one entry, `channels:2`) with `selected`, `kind` and `volume` as **linear** gain.
+- `SetTrack: Volume=<dB>` sets the **selected** tracks; there is no track index. `SetTrack: Gain=` (pre-3.x name) returns OK but does nothing, and `tools/verify_commands.py` checks command ids only, not parameters.
+- Audacity's JSON doesn't escape backslashes; `TrackListParser` repairs that.
+- Any scripting command runs on Audacity's UI thread and closes open menus.
+- Only one client can hold the pipe. To probe Audacity while the plugin is loaded, rename `%LocalAppData%\Logi\LogiPluginService\Plugins\AudacityPlugin.link` to `.link.off`, open `loupedeck:plugin/Audacity/reload`, probe, then rename it back and reload.
+
 ## SDK notes
 - Use the `logi-sdk` skill; it searches a local copy of the SDK docs.
 - `pluginFolderWin`/`pluginFolderMac` in `LoupedeckPackage.yaml` must match the build output folder (`bin/`), or the plugin won't load.

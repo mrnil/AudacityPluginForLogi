@@ -11,7 +11,7 @@ else:
 USED = ["Record1stChoice", "Record2ndChoice", "PlayStop", "Stop", "Pause", "CursProjectStart",
         "CursProjectEnd", "AddLabel", "AddLabelPlaying", "Undo", "Save", "ZoomIn", "ZoomOut",
         "FitInWindow", "SeekLeftShort", "SeekRightShort", "CursorShortJumpLeft",
-        "CursorShortJumpRight", "SetTrack", "Message"]
+        "CursorShortJumpRight", "SetTrack", "GetInfo"]
 
 to = open(TO, "w"); frm = open(FROM, "r")
 

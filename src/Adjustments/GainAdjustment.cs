@@ -1,27 +1,25 @@
 namespace Loupedeck.AudacityPlugin.Adjustments
 {
     using System;
-    using System.Globalization;
     using System.Threading.Tasks;
     using Loupedeck.AudacityPlugin.Pipe;
 
     /// <summary>
-    /// Gain of the selected track(s), 0.5 dB per tick, clamped to Audacity's ±36 dB.
-    /// Press = 0 dB. The value is tracked plugin-side (starts at 0 dB): the pipe gives us no
-    /// change notifications, so moving the slider in Audacity's UI won't be reflected here.
+    /// Volume of the selected track(s), 0.5 dB per tick, clamped to Audacity's ±36 dB. Press = 0 dB.
+    /// Each gesture starts from the selected track's current volume read from Audacity; the logic
+    /// lives in <see cref="GainController"/>.
     /// </summary>
     public class GainAdjustment : PluginDynamicAdjustment
     {
-        private const Double StepDb = 0.5;
-        private const Double MinDb = -36;
-        private const Double MaxDb = 36;
+        private static readonly PipeResult NotConnected = new(false, "Not connected to Audacity");
 
         private readonly TickCoalescer _ticks;
-        private Double _gainDb;
+        private readonly GainController _gain;
 
         public GainAdjustment()
-            : base("Track Gain", "Gain of the selected track(s). Press: reset to 0 dB", "Mixer", hasReset: true)
+            : base("Track Gain", "Volume of the selected track(s). Press: reset to 0 dB", "Mixer", hasReset: true)
         {
+            this._gain = new GainController(this.SendAsync, () => DateTime.UtcNow);
             this._ticks = new TickCoalescer(this.FlushAsync);
         }
 
@@ -29,31 +27,26 @@ namespace Loupedeck.AudacityPlugin.Adjustments
 
         protected override void ApplyAdjustment(String actionParameter, Int32 diff) => this._ticks.Add(diff);
 
-        protected override void RunCommand(String actionParameter)
-        {
-            this._gainDb = 0;
-            this.SendGain();
-        }
+        protected override void RunCommand(String actionParameter) =>
+            _ = this.AfterAsync(this._gain.ResetAsync());
 
-        protected override String GetAdjustmentValue(String actionParameter) =>
-            this._gainDb.ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture) + " dB";
+        protected override String GetAdjustmentValue(String actionParameter) => this._gain.Display;
 
-        private Task FlushAsync(Int32 ticks)
-        {
-            this._gainDb = Math.Clamp(this._gainDb + ticks * StepDb, MinDb, MaxDb);
-            return this.SendGain();
-        }
+        private Task FlushAsync(Int32 ticks) => this.AfterAsync(this._gain.AdjustAsync(ticks));
 
-        private Task SendGain()
+        private async Task AfterAsync(Task operation)
         {
-            this.AdjustmentValueChanged();
-            var client = this.Client;
-            if (client == null || !client.Connected)
+            try
             {
-                return Task.CompletedTask;
+                await operation.ConfigureAwait(false);
             }
-            // No Track= param: applies to the currently selected track(s).
-            return client.SendAsync(FormattableString.Invariant($"SetTrack: Gain={this._gainDb:0.0}"));
+            finally
+            {
+                this.AdjustmentValueChanged();
+            }
         }
+
+        private Task<PipeResult> SendAsync(String command) =>
+            this.Client?.SendAsync(command) ?? Task.FromResult(NotConnected);
     }
 }

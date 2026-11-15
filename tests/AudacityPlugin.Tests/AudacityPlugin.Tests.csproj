@@ -26,6 +26,7 @@
     <Compile Include="..\..\src\Pipe\**\*.cs" Link="Plugin\Pipe\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Helpers\**\*.cs" Link="Plugin\Helpers\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Actions\TransportStateMachine.cs" Link="Plugin\Actions\TransportStateMachine.cs" />
+    <Compile Include="..\..\src\Adjustments\GainController.cs" Link="Plugin\Adjustments\GainController.cs" />
   </ItemGroup>
 
   <ItemGroup>
