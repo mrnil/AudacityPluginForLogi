@@ -64,7 +64,10 @@ namespace Loupedeck.AudacityPlugin.Actions
             }
 
             var step = TransportStateMachine.Press(actionParameter, client.Transport, this._beforePause);
-            client.Send(step.Command);
+            if (step.Command != null)
+            {
+                client.Send(step.Command);
+            }
             this._beforePause = step.BeforePause;
             client.Transport = step.State;
         }

@@ -4,7 +4,9 @@ namespace Loupedeck.AudacityPlugin.Actions
 
     using Loupedeck.AudacityPlugin.Pipe;
 
-    /// <summary>What a button press sends to Audacity, and the optimistic transport state that follows.</summary>
+    /// <summary>
+    /// What a button press sends to Audacity (null: send nothing), and the optimistic transport state that follows.
+    /// </summary>
     internal readonly record struct TransportStep(String Command, TransportState State, TransportState BeforePause);
 
     /// <summary>
@@ -36,7 +38,9 @@ namespace Loupedeck.AudacityPlugin.Actions
                     {
                         return new TransportStep("Pause", TransportState.Paused, state);
                     }
-                    return new TransportStep("Pause", state, beforePause);
+                    // Pause while stopped arms Audacity's pause so the next Play/Record starts
+                    // paused, which this optimistic state can't follow. Do nothing instead.
+                    return new TransportStep(null, state, beforePause);
 
                 case "AddLabel":
                     // AddLabel uses the selection/cursor; AddLabelPlaying drops it at the play/record head.

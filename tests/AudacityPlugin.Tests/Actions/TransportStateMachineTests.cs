@@ -52,9 +52,11 @@ namespace Loupedeck.AudacityPlugin.Tests.Actions
         public void PauseWhilePausedResumesWhatWasRunning(String before) =>
             Assert.Equal(new TransportStep("Pause", T(before), T(before)), TransportStateMachine.Press("Pause", T(Pa), T(before)));
 
+        // Pause while stopped would arm Audacity's pause so the next Play/Record starts paused,
+        // which the optimistic state can't follow. Send nothing instead.
         [Fact]
-        public void PauseWhileStoppedSendsPauseButStaysStopped() =>
-            Assert.Equal(new TransportStep("Pause", T(S), T(Pl)), TransportStateMachine.Press("Pause", T(S), T(Pl)));
+        public void PauseWhileStoppedSendsNothingAndStaysStopped() =>
+            Assert.Equal(new TransportStep(null, T(S), T(Pl)), TransportStateMachine.Press("Pause", T(S), T(Pl)));
 
         [Theory]
         [InlineData(S, "AddLabel")]
