@@ -1,0 +1,19 @@
+type: plugin4
+name: Audacity
+displayName: Audacity
+version: 0.1.0
+author: Stephen
+copyright: Copyright (c) 2026 Stephen
+description: Control Audacity recording, playback, labels, zoom and track gain over mod-script-pipe.
+
+# VERIFY: copy the supportedDevices list from the yaml that `logiplugintool generate` produces
+# (or llms-full.txt). I don't have the exact identifiers for MX Creative Console / MX Master 4.
+supportedDevices:
+  - LoupedeckCtFamily
+  - LoupedeckLiveFamily
+
+pluginFileName: AudacityPlugin.dll
+pluginFolderWin: bin/
+pluginFolderMac: bin/
+
+license: MIT
