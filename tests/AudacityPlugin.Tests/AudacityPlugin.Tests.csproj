@@ -9,6 +9,7 @@
     <IsPackable>false</IsPackable>
     <RootNamespace>Loupedeck.AudacityPlugin.Tests</RootNamespace>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
     <PluginApiDir Condition="$(OS) == 'Windows_NT'">C:\Program Files\Logi\LogiPluginService\</PluginApiDir>

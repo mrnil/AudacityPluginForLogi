@@ -14,7 +14,7 @@ Logi Actions SDK plugin (C#, net10.0) that drives Audacity from Loupedeck / MX C
 ## Commands (run from repo root)
 - Build: `dotnet build -c Debug`. Side effects: copies `src/package/` into `bin/Debug/`, writes `%LocalAppData%\Logi\LogiPluginService\Plugins\AudacityPlugin.link` and reloads the plugin in Logi Plugin Service.
 - Compile only, no side effects: `dotnet msbuild src/AudacityPlugin.csproj -restore -t:Compile -p:Configuration=Debug -p:SolutionDir=<repo root>/`
-- Lint: part of the build. Analyzers (`latest-recommended`) and `src/.editorconfig` style rules are enforced with warnings as errors.
+- Lint: part of the build. Analyzers (`latest-recommended`) and `.editorconfig` style rules are enforced with warnings as errors, in both the plugin and test projects.
 - Test: `dotnet test --project tests/AudacityPlugin.Tests` (xUnit v3 on Microsoft.Testing.Platform, set in `global.json`). Don't run bare `dotnet test` at the root: it builds the plugin project, which triggers the deploy side effects above.
 - Tests compile plugin sources as linked files (see `tests/AudacityPlugin.Tests/AudacityPlugin.Tests.csproj`), not via ProjectReference; add a folder there when its classes need tests.
 - Dependency audit: `dotnet list src/AudacityPlugin.csproj package --vulnerable --include-transitive` and the same for `tests/AudacityPlugin.Tests`. The plugin has no NuGet packages, so DLLs bundled with `PluginApi.dll` are not covered.
@@ -26,7 +26,7 @@ Logi Actions SDK plugin (C#, net10.0) that drives Audacity from Loupedeck / MX C
 - Debug: attach to `LogiPluginService.exe` (`.vscode/launch.json`).
 
 ## Conventions in this codebase
-- `this.` on all member access, BCL type names (`String`, `Int32`, `Boolean`), `using` directives inside the namespace, Allman braces, `_camelCase` private fields (all from `src/.editorconfig`).
+- `this.` on all member access, BCL type names (`String`, `Int32`, `Boolean`), `using` directives inside the namespace, Allman braces, `_camelCase` private fields (all from `.editorconfig`).
 - One class per file; folders by role (`Actions/`, `Adjustments/`, `Pipe/`, `Helpers/`) matching sub-namespaces of `Loupedeck.AudacityPlugin`.
 - Infrastructure is `internal sealed`; SDK-facing action classes are `public`.
 - Async: `ConfigureAwait(false)`, fire-and-forget as `_ = ...`, exception filters on specific types.
