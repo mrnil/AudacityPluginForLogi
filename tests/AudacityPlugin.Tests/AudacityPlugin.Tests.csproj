@@ -19,11 +19,13 @@
   <!--
     Plugin sources are compiled in directly rather than via ProjectReference: building the plugin
     project runs its PostBuild (writes the .link file and reloads the plugin in Logi Plugin Service).
-    Add a folder here when its classes need tests.
+    Add a folder here when its classes need tests; link single files from folders whose other
+    classes depend on the plugin class (e.g. Actions/).
   -->
   <ItemGroup>
     <Compile Include="..\..\src\Pipe\**\*.cs" Link="Plugin\Pipe\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\src\Helpers\**\*.cs" Link="Plugin\Helpers\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\Actions\TransportStateMachine.cs" Link="Plugin\Actions\TransportStateMachine.cs" />
   </ItemGroup>
 
   <ItemGroup>
