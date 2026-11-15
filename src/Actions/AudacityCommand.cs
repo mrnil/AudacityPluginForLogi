@@ -63,47 +63,10 @@ namespace Loupedeck.AudacityPlugin.Actions
                 return;
             }
 
-            var state = client.Transport;
-            switch (actionParameter)
-            {
-                case "Record1stChoice":
-                case "Record2ndChoice":
-                    client.Send(actionParameter);
-                    client.Transport = TransportState.Recording;
-                    break;
-
-                case "PlayStop":
-                    client.Send("PlayStop");
-                    client.Transport = state == TransportState.Stopped ? TransportState.Playing : TransportState.Stopped;
-                    break;
-
-                case "Stop":
-                    client.Send("Stop");
-                    client.Transport = TransportState.Stopped;
-                    break;
-
-                case "Pause":
-                    client.Send("Pause");
-                    if (state == TransportState.Paused)
-                    {
-                        client.Transport = this._beforePause;
-                    }
-                    else if (state != TransportState.Stopped)
-                    {
-                        this._beforePause = state;
-                        client.Transport = TransportState.Paused;
-                    }
-                    break;
-
-                case "AddLabel":
-                    // AddLabel uses the selection/cursor; AddLabelPlaying drops it at the play/record head.
-                    client.Send(state == TransportState.Stopped ? "AddLabel" : "AddLabelPlaying");
-                    break;
-
-                default:
-                    client.Send(actionParameter);
-                    break;
-            }
+            var step = TransportStateMachine.Press(actionParameter, client.Transport, this._beforePause);
+            client.Send(step.Command);
+            this._beforePause = step.BeforePause;
+            client.Transport = step.State;
         }
 
         // Images: 80x80 PNG embedded resources, Images/<icon>[-active|-off].png
@@ -120,19 +83,11 @@ namespace Loupedeck.AudacityPlugin.Actions
             {
                 suffix = "-off";
             }
-            else if (IsActive(actionParameter, client.Transport))
+            else if (TransportStateMachine.IsActive(actionParameter, client.Transport))
             {
                 suffix = "-active";
             }
             return PluginResources.ReadImage($"{def.Icon}{suffix}.png");
         }
-
-        private static Boolean IsActive(String id, TransportState state) => id switch
-        {
-            "Record1stChoice" or "Record2ndChoice" => state == TransportState.Recording,
-            "PlayStop" => state == TransportState.Playing,
-            "Pause" => state == TransportState.Paused,
-            _ => false,
-        };
     }
 }
