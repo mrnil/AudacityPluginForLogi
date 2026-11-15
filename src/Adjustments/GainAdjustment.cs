@@ -40,7 +40,7 @@ namespace Loupedeck.AudacityPlugin.Adjustments
 
         private Task FlushAsync(Int32 ticks)
         {
-            this._gainDb = Math.Clamp(this._gainDb + (ticks * StepDb), MinDb, MaxDb);
+            this._gainDb = Math.Clamp(this._gainDb + ticks * StepDb, MinDb, MaxDb);
             return this.SendGain();
         }
 

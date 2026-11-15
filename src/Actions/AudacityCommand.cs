@@ -43,19 +43,13 @@ namespace Loupedeck.AudacityPlugin.Actions
 
         protected override Boolean OnLoad()
         {
-            if (this.Client != null)
-            {
-                this.Client.StateChanged += this.OnStateChanged;
-            }
+            this.Client?.StateChanged += this.OnStateChanged;
             return true;
         }
 
         protected override Boolean OnUnload()
         {
-            if (this.Client != null)
-            {
-                this.Client.StateChanged -= this.OnStateChanged;
-            }
+            this.Client?.StateChanged -= this.OnStateChanged;
             return true;
         }
 
