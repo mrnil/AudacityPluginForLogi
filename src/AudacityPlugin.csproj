@@ -30,6 +30,8 @@
   <ItemGroup>
     <Reference Include="PluginApi">
       <HintPath>$(PluginApiDir)PluginApi.dll</HintPath>
+      <!-- Logi Plugin Service supplies PluginApi.dll at runtime; it's Logitech's proprietary binary, so it must not be copied into the output or the .lplug4 -->
+      <Private>false</Private>
     </Reference>
   </ItemGroup>
 
