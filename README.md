@@ -41,3 +41,6 @@ Pipes: Windows `\\.\pipe\ToSrvPipe` / `\\.\pipe\FromSrvPipe`; macOS `/tmp/audaci
 ## Assets
 - `src/Images/*.png` — 80×80 PNG, RGBA, three variants each: `<name>.png`, `<name>-active.png` (record/play/pause), `<name>-off.png` (disconnected). Regenerate with `tools/make_icons.py src`.
 - `src/package/metadata/Icon256x256.png` — 256×256 PNG, RGBA.
+
+## Licence
+MIT. See [LICENSE](LICENSE).
