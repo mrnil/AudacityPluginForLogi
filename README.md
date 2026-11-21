@@ -42,5 +42,8 @@ Pipes: Windows `\\.\pipe\ToSrvPipe` / `\\.\pipe\FromSrvPipe`; macOS `/tmp/audaci
 - `src/Images/*.png` — 80×80 PNG, RGBA, three variants each: `<name>.png`, `<name>-active.png` (record/play/pause), `<name>-off.png` (disconnected). Regenerate with `tools/make_icons.py src`.
 - `src/package/metadata/Icon256x256.png` — 256×256 PNG, RGBA.
 
+## Releases
+Download the `.lplug4` from [Releases](https://github.com/mrnil/AudacityPluginForLogi/releases) and open it with Logi Options+ or the Loupedeck software. To publish a release, see [docs/release-process.md](docs/release-process.md); changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
 ## Licence
 MIT. See [LICENSE](LICENSE).
