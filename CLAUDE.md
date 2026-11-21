@@ -21,6 +21,7 @@ Logi Actions SDK plugin (C#, net10.0) that drives Audacity from Loupedeck / MX C
 - Dependency audit: `dotnet list src/AudacityPlugin.csproj package --vulnerable --include-transitive` and the same for `tests/AudacityPlugin.Tests`. The plugin has no NuGet packages, so DLLs bundled with `PluginApi.dll` are not covered.
 - Secret scan: `gitleaks git --redact` (history); the pre-commit hook scans staged changes.
 - Hooks: after cloning, run `git config core.hooksPath .githooks` (gitleaks pre-commit, Conventional Commits commit-msg).
+- CI: `.github/workflows/build.yml` (windows-latest). `PluginApi.dll` isn't on NuGet and must never be committed or shipped (Logitech proprietary), so CI silently installs Logi Options+ from Logitech's download, checks its Authenticode signature, then builds Release and tests. The plugin's `PluginApi` reference is `Private=false`, and CI fails if the DLL appears in `bin/Release`. Actions are pinned to commit SHAs.
 - Package / install: `logiplugintool pack ./bin/Release ./Audacity.lplug4`, then `logiplugintool install ./Audacity.lplug4`.
 - Manifest check: after any change to `LoupedeckPackage.yaml`, pack and run `logiplugintool verify <package>.lplug4` (it rejects unknown `supportedDevices` names); `logiplugintool metadata <package>.lplug4` shows what was parsed.
 - Plugin log: `%LocalAppData%\Logi\LogiPluginService\Logs\plugin_logs\Audacity.log`.
