@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-21
+
 ### Added
 
 - Buttons for Record, Record New Track, Play/Stop, Stop, Pause, Go to Start/End, Add Label, Undo, Save Project and Zoom In/Out/Fit, driven over Audacity's mod-script-pipe
