@@ -3,7 +3,7 @@
 [![Build and test](https://github.com/mrnil/AudacityPluginForLogi/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/mrnil/AudacityPluginForLogi/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/mrnil/AudacityPluginForLogi?include_prereleases&sort=semver)](https://github.com/mrnil/AudacityPluginForLogi/releases)
 [![Licence: MIT](https://img.shields.io/github/license/mrnil/AudacityPluginForLogi)](LICENSE)
-![Platforms: Windows | macOS](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS-blue)
+![Platforms: Windows | macOS (untested)](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%28untested%29-blue)
 ![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
 
 Controls Audacity over its **mod-script-pipe** scripting module. Windows + macOS.
