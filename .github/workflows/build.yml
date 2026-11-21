@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The job id is the check name release.yml requires on a tagged commit: rename both together
   build-and-test:
     name: build-and-test
     runs-on: windows-latest
@@ -30,41 +31,8 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # PluginApi.dll is Logitech's proprietary binary and isn't on NuGet or in this repo.
-      # Install Logi Options+ (which brings Logi Plugin Service) from Logitech's own download
-      # so the projects find it at their usual path. The runner VM is discarded after the job.
-      - name: Install Logi Options+ (provides PluginApi.dll)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $installer = Join-Path $env:RUNNER_TEMP 'logioptionsplus_installer.exe'
-          $logDir = Join-Path $env:RUNNER_TEMP 'optionsplus-log'
-          New-Item -ItemType Directory -Force $logDir | Out-Null
-          Invoke-WebRequest -Uri 'https://download01.logi.com/web/ftp/pub/techsupport/optionsplus/logioptionsplus_installer.exe' -OutFile $installer
-
-          # No published hash to pin against, so require a valid Logitech Authenticode signature
-          $sig = Get-AuthenticodeSignature $installer
-          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=Logitech') {
-            throw "Installer signature check failed: $($sig.Status) $($sig.SignerCertificate.Subject)"
-          }
-
-          $p = Start-Process -FilePath $installer -ArgumentList '/quiet','/analytics','no','/sso','no','/update','no','/dfu','no','/log',$logDir -Wait -PassThru
-          Write-Host "Installer exited with $($p.ExitCode)"
-
-          # The installer can hand off to a child setup process, so wait for the DLL itself
-          $dll = 'C:\Program Files\Logi\LogiPluginService\PluginApi.dll'
-          $deadline = (Get-Date).AddMinutes(10)
-          while (-not (Test-Path $dll) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 10 }
-          if (-not (Test-Path $dll)) {
-            Get-ChildItem $logDir -Recurse -File | ForEach-Object { Write-Host "== $($_.Name)"; Get-Content $_.FullName -Tail 50 }
-            throw "PluginApi.dll not found after install"
-          }
-
-          $dllSig = Get-AuthenticodeSignature $dll
-          if ($dllSig.Status -ne 'Valid' -or $dllSig.SignerCertificate.Subject -notmatch 'O=Logitech') {
-            throw "PluginApi.dll signature check failed: $($dllSig.Status)"
-          }
-          Write-Host "PluginApi.dll $((Get-Item $dll).VersionInfo.FileVersion)"
+      - name: Install PluginApi.dll
+        uses: ./.github/actions/install-pluginapi
 
       # PluginDir points the post-build .link file at a scratch folder instead of the Logi plugins folder
       - name: Build (Release; analyzers and style rules are errors)
@@ -82,3 +50,22 @@ jobs:
 
       - name: Test
         run: dotnet test --project tests/AudacityPlugin.Tests -c Release --no-build
+
+      - name: Package and verify
+        shell: pwsh
+        run: |
+          dotnet tool restore   # LogiPluginTool, pinned in dotnet-tools.json
+          dotnet logiplugintool pack bin\Release Audacity.lplug4
+          dotnet logiplugintool verify Audacity.lplug4
+
+      - name: Check package
+        uses: ./.github/actions/check-package
+        with:
+          package: Audacity.lplug4
+
+      - name: Upload package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Audacity-${{ github.sha }}
+          path: Audacity.lplug4
+          retention-days: 14
