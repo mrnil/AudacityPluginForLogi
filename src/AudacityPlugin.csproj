@@ -5,6 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <RootNamespace>Loupedeck.AudacityPlugin</RootNamespace>
+    <!-- Keep in step with version: in package/metadata/LoupedeckPackage.yaml; the release workflow checks both against the tag -->
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
 
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>

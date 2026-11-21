@@ -2,8 +2,8 @@ type: plugin4
 name: Audacity
 displayName: Audacity
 version: 0.1.0
-author: Stephen
-copyright: Copyright (c) 2026 Stephen
+author: mrnil
+copyright: Copyright (c) 2026 mrnil
 description: Control Audacity recording, playback, labels, zoom and track gain over mod-script-pipe.
 
 # Names are Loupedeck.DeviceType values; check with `logiplugintool verify` after packing.
@@ -18,5 +18,4 @@ pluginFolderMac: bin/
 license: MIT
 licenseUrl: https://opensource.org/licenses/MIT
 
-# TODO: required for the marketplace; add once the repo has a public remote (e.g. its issues page).
-# supportPageUrl:
+supportPageUrl: https://github.com/mrnil/AudacityPluginForLogi/issues
