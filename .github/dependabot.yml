@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # Workflows pin actions to commit SHAs with the version in a comment; Dependabot
+  # bumps both. "/" covers .github/workflows; the glob covers the local composite actions.
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/.github/actions/*"
+    schedule:
+      interval: "monthly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+      include: "scope"
